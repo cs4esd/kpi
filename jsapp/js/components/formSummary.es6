@@ -79,7 +79,13 @@ class FormSummary extends React.Component {
     }
   }
   prepSubmissions(assetid) {
-    var wkStart = this.state.chartPeriod == 'week' ? moment().subtract(6, 'days') : moment().subtract(30, 'days');
+    
+    /*
+           fix issue 
+           https://github.com/cs4esd/cs4esdIssueTracker/projects/1#card-23437232
+    */
+           
+    var wkStart = this.state.chartPeriod == 'week' ? moment().startOf('day').subtract(6, 'days') : moment().startOf('day').subtract(30, 'days');
     var lastWeekStart = this.state.chartPeriod == 'week' ? moment().subtract(13, 'days') : moment().subtract(60, 'days');
     var startOfWeek = moment().startOf('week');
 
@@ -97,7 +103,9 @@ class FormSummary extends React.Component {
 
           thisWeekSubs.forEach(function(s, i){
             var d = moment(s._submission_time);
-            var diff = d.diff(wkStart, 'days');
+           
+           
+            var diff = d.diff(wkStart, 'days') ; 
             subsPerDay[diff] += 1;
           });
 
