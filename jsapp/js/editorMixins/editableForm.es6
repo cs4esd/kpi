@@ -328,6 +328,10 @@ export default assign({
   },
 
   saveForm(evt) {
+    
+    console.log("SaveForm TODO Move this to save success");
+          
+    
     if (evt && evt.preventDefault) {
       evt.preventDefault();
     }
@@ -551,10 +555,21 @@ export default assign({
     });
   },
 
+
+  // clean up reference to default response map for geopoint widget
+  removeDefaultResponseMap(){
+      let mapcontainer = $('#default-response-map');   
+      if (mapcontainer.length > 0 && mapcontainer[0]._leaflet_map)
+      {          
+         let map = mapcontainer[0]._leaflet_map;
+         map.remove();
+      }   
+  },
   // navigating out of form builder
 
   safeNavigateToRoute(route) {
     if (!this.needsSave()) {
+      this.removeDefaultResponseMap();
       hashHistory.push(route);
     } else {
       let dialog = alertify.dialog('confirm');
@@ -563,7 +578,8 @@ export default assign({
         message: '',
         labels: {ok: t('Yes, leave form'), cancel: t('Cancel')},
         onok: (evt, val) => {
-          hashHistory.push(route);
+            this.removeDefaultResponseMap()
+            hashHistory.push(route);
         },
         oncancel: () => {
           dialog.destroy();
