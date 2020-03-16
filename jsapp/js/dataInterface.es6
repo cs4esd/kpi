@@ -76,6 +76,7 @@ var dataInterface;
         data: data
       });
     },
+    
     listTemplates () {
       return $ajax({
         url: `${rootUrl}/assets/?q=asset_type:template`
@@ -90,6 +91,17 @@ var dataInterface;
         method: 'POST',
         data: data
       });
+    },
+    callKobocatAPI (url) {
+      return $ajax({
+         url: url ,
+         crossDomain: true,
+         xhrFields: {
+            withCredentials: true
+         }
+         
+     
+  });
     },
 
     /*

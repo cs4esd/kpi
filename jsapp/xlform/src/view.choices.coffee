@@ -15,6 +15,8 @@ module.exports = do ->
       $($.parseHTML $viewTemplates.row.selectQuestionExpansion()).insertAfter @rowView.$('.card__header')
       @$el = @rowView.$(".list-view")
       @ulClasses = @$("ul").prop("className")
+      @mediametadata = this.rowView.options.surveyView.appState.mediametadata
+
 
     render: ->
       cardText = @rowView.$el.find('.card__text')
@@ -23,6 +25,7 @@ module.exports = do ->
       @$el.html (@ul = $("<ul>", class: @ulClasses))
       if @row.get("type").get("rowType").specifyChoice
         for option, i in @model.options.models
+          option.mediameta = this.mediametadata 
           new OptionView(model: option, cl: @model).render().$el.appendTo @ul
         if i == 0
           while i < 2
@@ -58,6 +61,7 @@ module.exports = do ->
 
     addEmptyOption: (label)->
       emptyOpt = new $choices.Option(label: label)
+      emptyOpt.mediameta = this.mediametadata
       @model.options.add(emptyOpt)
       new OptionView(model: emptyOpt, cl: @model).render().$el.appendTo @ul
       lis = @ul.find('li')
@@ -83,16 +87,44 @@ module.exports = do ->
       "keyup input": "keyupinput"
       "click .js-remove-option": "remove"
     initialize: (@options)->
+      @options = @options
     render: ->
       @t = $("<i class=\"fa fa-trash-o js-remove-option\">")
       @pw = $("<div class=\"editable-wrapper js-cancel-select-row\">")
       @p = $("<span class=\"js-cancel-select-row\">")
-      @c = $("<code><label>#{_t('Value:')}</label> <span class=\"js-cancel-select-row\">#{_t('AUTOMATIC')}</span></code>")
+      @c = $("<code><label>#{_t('Value:')}</label> <span class=\"js-cancel-select-row\">#{_t('AUTOMATIC')}</span></code>") 
+      @c2 = $("<code><label>#{_t('Media')}</label> <select class=\"js-cancel-select-row\"></select></code>") 
+    
+      @b = $("<div><input type='text' value=''></input></div>")
+      @s = $("<div class=\"media-option-select\"><label>#{_t('Media')}</label><select ></select></div>")
       @d = $('<div>')
       if @model
         @p.html @model.get("label") || 'Empty'
         @$el.attr("data-option-id", @model.cid)
         $('span', @c).html @model.get("name")
+        $('input', this.b).attr('value', @model.get("media::image")) 
+        
+        if (this.model.mediameta && this.model.mediameta.length > 0)
+           # $('code', this.c2).removeClass("hidden")
+            option = new Option("None", "")        
+            $('select', this.c2).append(option)
+           
+            for media in @model.mediameta 
+                option = new Option(media.data_value, media.data_value) 
+                if(media.data_value == @model.get("media::image"))
+                    option.selected = "true"                      
+                $('select', this.c2).append(option)
+            
+            # if could not match media::image, the image may have
+            # been removed from project settings so reset to null 
+            if ( $('select', this.c2).length > 0 &&  $('select', this.c2)[0].selectedIndex == 0 ) 
+                @model.set("media::image","" ) 
+            
+            
+        #else
+           # $(this.c2).addClass("hidden")
+         
+        
         @model.set('setManually', true)
       else
         @model = new $choices.Option()
@@ -126,15 +158,25 @@ module.exports = do ->
         newValue: val
       @pw.html(@p)
 
+      $('input', this.b).on 'change' , (event) => 
+          @model.set("media::image",event.target.value )
+    
+      $('select', this.c2).on 'change' , (event) => 
+          @model.set("media::image",event.target.value )
+          
       @pw.on 'click', (event) =>
         if !@p.is(':hidden') && event.target != @p[0]
           @p.click()
 
+
+   
       @d.append(@pw)
       @d.append(@t)
       @d.append(@c)
+      @d.append(@c2)
       @$el.html(@d)
       @
+      
     keyupinput: (evt)->
       ifield = @$("input.inplace_field")
       if evt.keyCode is 8 and ifield.hasClass("empty")

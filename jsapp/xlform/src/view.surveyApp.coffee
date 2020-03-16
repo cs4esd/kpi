@@ -127,6 +127,7 @@ module.exports = do ->
       @warnings = options.warnings || []
       @__rowViews = new Backbone.Model()
       @ngScope = options.ngScope
+      @appState = options.appState
       @surveyStateStore = options.stateStore || {trigger:$.noop, setState:$.noop}
 
       $(document).on 'click', @deselect_rows
@@ -242,7 +243,10 @@ module.exports = do ->
 
     toggleCardSettings: (evt)->
       @_getViewForTarget(evt).toggleSettings()
-
+      
+     
+          
+         
     toggleGroupExpansion: (evt)->
       view = @_getViewForTarget(evt)
       groupsAreShrunk = view.$el.hasClass('group--shrunk')
@@ -633,6 +637,7 @@ module.exports = do ->
 
     onEscapeKeydown: -> #noop. to be overridden
     previewButtonClick: (evt)->
+      
       if evt.shiftKey #and evt.altKey
         evt.preventDefault()
         if evt.altKey
@@ -642,6 +647,7 @@ module.exports = do ->
         $viewUtils.debugFrame content.replace(new RegExp(' ', 'g'), '&nbsp;')
         @onEscapeKeydown = $viewUtils.debugFrame.close
       else
+        
         $viewUtils.enketoIframe.fromCsv @survey.toCSV(),
           previewServer: window.koboConfigs?.previewServer or "https://kf.kobotoolbox.org"
           enketoServer: window.koboConfigs?.enketoServer or false
@@ -723,6 +729,7 @@ module.exports = do ->
     events:
       "click .js-start-survey": "startSurvey"
     initialize: (@options)->
+       
     render: ()->
       @$el.addClass("content--centered").addClass("content")
       @$el.html $viewTemplates.$$render('surveyTemplateApp')
