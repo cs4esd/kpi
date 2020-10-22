@@ -3,11 +3,11 @@ import PropTypes from 'prop-types';
 import reactMixin from 'react-mixin';
 import autoBind from 'react-autobind';
 import Reflux from 'reflux';
-import searches from '../searches';
+import {searches} from '../searches';
 import mixins from '../mixins';
-import stores from '../stores';
+import {stores} from '../stores';
 import {dataInterface} from '../dataInterface';
-import bem from '../bem';
+import {bem} from '../bem';
 import AssetRow from './assetrow';
 import DocumentTitle from 'react-document-title';
 import $ from 'jquery';
@@ -68,8 +68,8 @@ class SearchCollectionList extends Reflux.Component {
     if (this.props.searchContext.store.filterTags == 'asset_type:survey') {
       let offset = $(event.target).children('.asset-list').offset().top;
       this.setState({
-        fixedHeadings: offset < -105 ? 'fixed-headings' : '',
-        fixedHeadingsWidth: offset < -105 ? $(event.target).children('.asset-list').width() + 'px' : 'auto',
+        fixedHeadings: offset < 30 ? 'fixed-headings' : '',
+        fixedHeadingsWidth: offset < 30 ? $(event.target).children('.asset-list').width() + 'px' : 'auto',
       });
     }
   }
@@ -184,21 +184,18 @@ class SearchCollectionList extends Reflux.Component {
       }
     );
 
-    return [
-      <bem.List__heading key='h1' className='is-edge'>
-        {t('Active Projects')}
-      </bem.List__heading>,
-      results];
+    return results;
   }
 
   render () {
     var s = this.state;
     var docTitle = '';
+    let display;
     if (this.props.searchContext.store.filterTags == 'asset_type:survey') {
-      var display = 'grouped';
+      display = 'grouped';
       docTitle = t('Projects');
     } else {
-      var display = 'regular';
+      display = 'regular';
       docTitle = t('Library');
     }
     return (
@@ -265,7 +262,7 @@ class SearchCollectionList extends Reflux.Component {
                             <bem.Loading__inner>
                               {t('Let\'s get started by creating your first project. Click the New button to create a new form.')}
                               <div className='pro-tip'>
-                              {t('Advanced users: You also drag and drop XLSForms here and they will be uploaded and converted to projects.')}
+                              {t('Advanced users: You can also drag and drop XLSForms here and they will be uploaded and converted to projects.')}
                               </div>
                             </bem.Loading__inner>
                           </bem.Loading>

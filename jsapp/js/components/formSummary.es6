@@ -1,21 +1,20 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import reactMixin from 'react-mixin';
-import PropTypes from 'prop-types';
 import autoBind from 'react-autobind';
 import Reflux from 'reflux';
 import { Link } from 'react-router';
 import {dataInterface} from '../dataInterface';
-import stores from '../stores';
+import {stores} from '../stores';
 import mixins from '../mixins';
-import bem from '../bem';
-
+import {bem} from '../bem';
+import ui from 'js/ui';
 import DocumentTitle from 'react-document-title';
 import moment from 'moment';
 import Chart from 'chart.js';
 
 import {
-  assign, t, formatTime, formatDate, stringToColor
+  t, formatTime, formatDate, stringToColor
 } from '../utils';
 
 import {MODAL_TYPES} from '../constants';
@@ -79,33 +78,29 @@ class FormSummary extends React.Component {
     }
   }
   prepSubmissions(assetid) {
-    
-    /*
-           fix issue 
-           https://github.com/cs4esd/cs4esdIssueTracker/projects/1#card-23437232
-    */
-           
-    var wkStart = this.state.chartPeriod == 'week' ? moment().startOf('day').subtract(6, 'days') : moment().startOf('day').subtract(30, 'days');
-    var lastWeekStart = this.state.chartPeriod == 'week' ? moment().subtract(13, 'days') : moment().subtract(60, 'days');
-    var startOfWeek = moment().startOf('week');
+    var wkStart = this.state.chartPeriod == 'week' ? moment().startOf('days').subtract(6, 'days') : moment().startOf('days').subtract(30, 'days');
+    var lastWeekStart = this.state.chartPeriod == 'week' ? moment().startOf('days').subtract(13, 'days') : moment().startOf('days').subtract(60, 'days');
 
     const query = `query={"_submission_time": {"$gte":"${wkStart.toISOString()}"}}&fields=["_id","_submission_time"]`;
     dataInterface.getSubmissionsQuery(assetid, query).done((thisWeekSubs) => {
-      var subsCurrentPeriod = thisWeekSubs.length;
+      var subsCurrentPeriod = thisWeekSubs.results.length;
 
       const q2 = `query={"_submission_time": {"$gte":"${lastWeekStart.toISOString()}"}}&fields=["_id"]`;
       dataInterface.getSubmissionsQuery(assetid, q2).done((d) => {
         if (subsCurrentPeriod > 0) {
+          let subsPerDay;
           if (this.state.chartPeriod == 'week')
-            var subsPerDay = [0,0,0,0,0,0,0];
+            subsPerDay = [0,0,0,0,0,0,0];
           else
-            var subsPerDay = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+            subsPerDay = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
 
-          thisWeekSubs.forEach(function(s, i){
-            var d = moment(s._submission_time);
-           
-           
-            var diff = d.diff(wkStart, 'days') ; 
+          thisWeekSubs.results.forEach(function(s, i) {
+            // As submission times are in UTC,
+            // this will get the computer timezone difference with UTC
+            // and adapt the submission date to reflect that in the chart.
+            var d = new Date(s._submission_time);
+            var timezoneToday = moment(d.valueOf() - (d.getTimezoneOffset() * 60 * 1000));
+            var diff = timezoneToday.diff(wkStart, 'days');
             subsPerDay[diff] += 1;
           });
 
@@ -126,7 +121,7 @@ class FormSummary extends React.Component {
         }
 
         this.setState({
-          subsPreviousPeriod: d.length - subsCurrentPeriod,
+          subsPreviousPeriod: d.results.length - subsCurrentPeriod,
           subsCurrentPeriod: subsCurrentPeriod,
           chartVisible: subsCurrentPeriod ? true : false
         });
@@ -138,8 +133,9 @@ class FormSummary extends React.Component {
     const fq = ['_id', 'end'];
     const sort = [{id: '_id', desc: true}];
     dataInterface.getSubmissions(assetid, 1, 0, sort, fq).done((data) => {
-      if (data.length)
-        this.setState({lastSubmission: data[0]['end']});
+      let results = data.results;
+      if (data.count)
+        this.setState({lastSubmission: results[0]['end']});
       else
         this.setState({lastSubmission: false});
     });
@@ -172,10 +168,10 @@ class FormSummary extends React.Component {
               <span className='subs-graph-number'>{this.state.subsCurrentPeriod}</span>
               <bem.FormView__label>
                 {this.state.chartPeriod=='week' &&
-                  `${t('Today')} - ${formatDate(moment().subtract(6, 'days'))}`
+                  `${formatDate(moment().subtract(6, 'days'))} - ${formatDate(moment())}`
                 }
                 {this.state.chartPeriod!='week' &&
-                  `${t('Today')} - ${formatDate(moment().subtract(30, 'days'))}`
+                  `${formatDate(moment().subtract(30, 'days'))} - ${formatDate(moment())}`
                 }
               </bem.FormView__label>
             </bem.FormView__cell>
@@ -183,10 +179,10 @@ class FormSummary extends React.Component {
               <span className='subs-graph-number'>{this.state.subsPreviousPeriod}</span>
               <bem.FormView__label>
                 {this.state.chartPeriod=='week' &&
-                  `${formatDate(moment().subtract(7, 'days'))} - ${formatDate(moment().subtract(13, 'days'))}`
+                  `${formatDate(moment().subtract(13, 'days'))} - ${formatDate(moment().subtract(7, 'days'))}`
                 }
                 {this.state.chartPeriod!='week' &&
-                  `${formatDate(moment().subtract(31, 'days'))} - ${formatDate(moment().subtract(60, 'days'))}`
+                  `${formatDate(moment().subtract(60, 'days'))} - ${formatDate(moment().subtract(31, 'days'))}`
                 }
               </bem.FormView__label>
             </bem.FormView__cell>
@@ -248,7 +244,6 @@ class FormSummary extends React.Component {
   renderDataTabs() {
     const sideTabs = [
       {label: t('Reports'), icon: 'k-icon-report', path: `/forms/${this.state.uid}/data/report`},
-      {label: t('Reports (legacy)'), icon: 'k-icon-report', path: `/forms/${this.state.uid}/data/report-legacy`, className: 'is-edge'},
       {label: t('Table'), icon: 'k-icon-table', path: `/forms/${this.state.uid}/data/table`},
       {label: t('Gallery'), icon: 'k-icon-photo-gallery', path: `/forms/${this.state.uid}/data/gallery`},
       {label: t('Downloads'), icon: 'k-icon-download', path: `/forms/${this.state.uid}/data/downloads`},
@@ -263,7 +258,7 @@ class FormSummary extends React.Component {
             key={ind}
             activeClassName='active'
             onlyActiveOnIndex
-            className={`form-view__tab ${item.className || ''}`}
+            className='form-view__tab'
             data-path={item.path}
             onClick={this.triggerRefresh}>
               <i className={item.icon} />
@@ -324,6 +319,7 @@ class FormSummary extends React.Component {
   }
   render () {
     let docTitle = this.state.name || t('Untitled');
+    let permAccess = this.userCan('view_submissions', this.state) || this.userCan('partial_submissions', this.state);
 
     if (!this.state.permissions) {
       return (
@@ -336,17 +332,8 @@ class FormSummary extends React.Component {
       );
     }
 
-    if (!this.userCan('view_submissions', this.state)) {
-      return (
-        <bem.Loading>
-          <bem.Loading__inner>
-            <h3>
-              {t('Access Denied')}
-            </h3>
-            {t('You do not have permission to view this page.')}
-          </bem.Loading__inner>
-        </bem.Loading>
-      );
+    if (!permAccess) {
+      return (<ui.AccessDeniedMessage/>);
     }
 
     return (

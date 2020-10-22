@@ -1,18 +1,20 @@
-/*
- the 'searches' modules provides a combination of
- Reflux.actions and Reflux.stores which trigger and store
- searches in different contexts.
-*/
+/**
+ * This module provides a combination of Reflux actions and stores that trigger
+ * and keep searches data in different contexts. Most of the times it should be
+ * your de facto way of getting a lists of assets, as to use global search
+ * context everywhere.
+ */
+
 import _ from 'underscore';
 import Reflux from 'reflux';
 import $ from 'jquery';
 import SparkMD5 from 'spark-md5';
 
-import stores from './stores';
-import actions from './actions';
+import {stores} from './stores';
+import {actions} from './actions';
 import {dataInterface} from './dataInterface';
 import {assign} from './utils';
-import assetParserUtils from './assetParserUtils';
+import {parsed} from './assetParserUtils';
 
 const emptySearchState = {
   searchState: 'none',
@@ -327,7 +329,7 @@ function SearchContext(opts={}) {
   });
 
   search.completed.listen(function(searchParams, data, _opts){
-    data.results = data.results.map(assetParserUtils.parsed);
+    data.results = data.results.map(parsed);
     data.results.forEach(stores.allAssets.registerAssetOrCollection);
 
     var count = data.count;
@@ -498,7 +500,7 @@ function getSearchContext(name, opts={}) {
   return contexts[name];
 }
 
-module.exports = {
+export const searches = {
   getSearchContext: getSearchContext,
   common: commonMethods,
   isSearchContext: isSearchContext,

@@ -1,10 +1,25 @@
+/**
+ * Reflux stores for keeping all the user data.
+ *
+ * Using it in multiple components helps with keeping whole application up to
+ * date and avoids making unnecessary calls to Backend.
+ *
+ * It is tightly connected to actions and the most kosher way of handling data
+ * would be to trigger Backend calls through actions but to observe the results
+ * throught stores not actions callbacks (for applicable stores of course - not
+ * every action is connected to a store).
+ *
+ * TODO: it would be best to split these to separate files within `jsapp/js/stores`
+ * directory and probably import all of them here and keep this file as a single
+ * source for all stores(?).
+ */
+
 import Reflux from 'reflux';
 import {Cookies} from 'react-cookie';
-import alertify from 'alertifyjs';
-
+import clonedeep from 'lodash.clonedeep';
 import dkobo_xlform from '../xlform/src/_xlform.init';
-import assetParserUtils from './assetParserUtils';
-import actions from './actions';
+import {parsed, parseTags} from './assetParserUtils';
+import {actions} from './actions';
 import {
   log,
   t,
@@ -29,7 +44,7 @@ function changes(orig_obj, new_obj) {
   return out;
 }
 
-var stores = {};
+export var stores = {};
 
 var tagsStore = Reflux.createStore({
   init () {
@@ -160,39 +175,19 @@ stores.snapshots = Reflux.createStore({
 var assetStore = Reflux.createStore({
   init: function () {
     this.data = {};
-    this.relatedUsers = {};
     this.listenTo(actions.resources.loadAsset.completed, this.onLoadAssetCompleted);
     this.listenTo(actions.resources.updateAsset.completed, this.onUpdateAssetCompleted);
   },
 
-  noteRelatedUsers: function (data) {
-    // this preserves usernames in the store so that the list does not
-    // reorder or drop users depending on subsequent server responses
-    if (!this.relatedUsers[data.uid]) {
-      this.relatedUsers[data.uid] = [];
-    }
-
-    var relatedUsers = this.relatedUsers[data.uid];
-    data.permissions.forEach(function (perm) {
-      var username = perm.user.match(/\/users\/(.*)\//)[1];
-      var isOwnerOrAnon = username === data.owner__username || username === 'AnonymousUser';
-      if (!isOwnerOrAnon && relatedUsers.indexOf(username) === -1) {
-        relatedUsers.push(username);
-      }
-    });
-  },
-
   onUpdateAssetCompleted: function (resp/*, req, jqhr*/){
-    this.data[resp.uid] = assetParserUtils.parsed(resp);
-    this.noteRelatedUsers(resp);
+    this.data[resp.uid] = parsed(resp);
     this.trigger(this.data, resp.uid, {asset_updated: true});
   },
   onLoadAssetCompleted: function (resp/*, req, jqxhr*/) {
     if (!resp.uid) {
       throw new Error('no uid found in response');
     }
-    this.data[resp.uid] = assetParserUtils.parsed(resp);
-    this.noteRelatedUsers(resp);
+    this.data[resp.uid] = parsed(resp);
     this.trigger(this.data, resp.uid);
   }
 });
@@ -219,52 +214,33 @@ var sessionStore = Reflux.createStore({
   },
   triggerAnonymous (/*data*/) {},
   triggerEnv (environment) {
+    const nestedArrToChoiceObjs = (i) => {
+      return {
+        value: i[0],
+        label: i[1],
+      };
+    };
+    if (environment.available_sectors) {
+      environment.available_sectors = environment.available_sectors.map(
+        nestedArrToChoiceObjs);
+    }
+    if (environment.available_countries) {
+      environment.available_countries = environment.available_countries.map(
+        nestedArrToChoiceObjs);
+    }
+    if (environment.interface_languages) {
+      environment.interface_languages = environment.interface_languages.map(
+        nestedArrToChoiceObjs);
+    }
+    if (environment.all_languages) {
+      environment.all_languages = environment.all_languages.map(
+        nestedArrToChoiceObjs);
+    }
     this.environment = environment;
+    this.trigger({environment: environment});
   },
   triggerLoggedIn (acct) {
     this.currentAccount = acct;
-    if (acct.upcoming_downtime) {
-      var downtimeString = acct.upcoming_downtime[0];
-      acct.downtimeDate = new Date(Date.parse(acct.upcoming_downtime[0]));
-      acct.downtimeMessage = acct.upcoming_downtime[1];
-      stores.pageState._onHideModal = function () {
-        window.localStorage.setItem('downtimeNoticeSeen', downtimeString);
-      }
-      if (window.localStorage['downtimeNoticeSeen'] !== downtimeString) {
-        // user has not seen the notification about upcoming downtime
-        window.setTimeout(function(){
-          stores.pageState.showModal({
-            message: acct.downtimeMessage,
-            icon: 'gears',
-          })
-        }, 1500);
-      }
-    } else {
-      if ('downtimeNoticeSeen' in window.localStorage) {
-        localStorage.removeItem('downtimeNoticeSeen');
-      }
-    }
-    var nestedArrToChoiceObjs = function (_s) {
-      return {
-        value: _s[0],
-        label: _s[1],
-      };
-    };
-    if (acct.available_sectors) {
-      acct.available_sectors = acct.available_sectors.map(
-        nestedArrToChoiceObjs);
-    }
-    if (acct.available_countries) {
-      acct.available_countries = acct.available_countries.map(
-        nestedArrToChoiceObjs);
-    }
-    if (acct.languages) {
-      acct.languages = acct.languages.map(nestedArrToChoiceObjs);
-    }
-    if (acct.all_languages) {
-      acct.all_languages = acct.all_languages.map(nestedArrToChoiceObjs);
-    }
-
     this.trigger({
       isLoggedIn: true,
       sessionIsLoggedIn: true,
@@ -297,12 +273,19 @@ var assetContentStore = Reflux.createStore({
 
 var surveyCompanionStore = Reflux.createStore({
   init () {
-    this.listenTo(actions.survey.addItemAtPosition, this.addItemAtPosition);
+    this.listenTo(actions.survey.addExternalItemAtPosition, this.addExternalItemAtPosition);
   },
-  addItemAtPosition ({position, survey, uid}) {
+  addExternalItemAtPosition ({position, survey, uid, groupId}) {
+    // `survey` is what's currently open in the form builder
+    // `uid` identifies the library item being added to `survey`
     stores.allAssets.whenLoaded(uid, function(asset){
-      var _s = dkobo_xlform.model.Survey.loadDict(asset.content, survey)
-      survey.insertSurvey(_s, position);
+      // `asset` is the library item being added to `survey`
+      // be careful not to mutate it, becuase it's kept in a store and not
+      // re-fetched from the server each time it's loaded
+      let assetCopy = clonedeep(asset);
+      // `loadDict()` will mutate its first argument; see `inputParser.parse()`
+      let _s = dkobo_xlform.model.Survey.loadDict(assetCopy.content, survey)
+      survey.insertSurvey(_s, position, groupId);
     });
   }
 })
@@ -322,6 +305,10 @@ var allAssetsStore = Reflux.createStore({
     this.listenTo(actions.resources.loadAsset.completed, this.onLoadAssetCompleted);
   },
   whenLoaded (uid, cb) {
+    if (typeof uid !== 'string' || typeof cb !== 'function') {
+      return;
+    }
+
     if (this.byUid[uid] && this.byUid[uid].content) {
       cb.call(this, this.byUid[uid]);
     } else {
@@ -360,7 +347,7 @@ var allAssetsStore = Reflux.createStore({
     }, 500);
   },
   registerAssetOrCollection (asset) {
-    const parsedObj = assetParserUtils.parseTags(asset);
+    const parsedObj = parseTags(asset);
     asset.tags = parsedObj.tags;
     this.byUid[asset.uid] = asset;
     if (asset.content) {
@@ -418,7 +405,7 @@ var userExistsStore = Reflux.createStore({
   init () {
     this.checked = {};
     this.listenTo(actions.misc.checkUsername.completed, this.usernameExists);
-    this.listenTo(actions.misc.checkUsername.failed_, this.usernameDoesntExist);
+    this.listenTo(actions.misc.checkUsername.failed, this.usernameDoesntExist);
   },
   checkUsername (username) {
     if (username in this.checked) {
@@ -490,37 +477,6 @@ var serverEnvironmentStore = Reflux.createStore({
   },
 });
 
-if (window.Intercom) {
-  var IntercomStore = Reflux.createStore({
-    init () {
-      this.listenTo(actions.navigation.routeUpdate, this.routeUpdate);
-      this.listenTo(actions.auth.verifyLogin.loggedin, this.loggedIn);
-      this.listenTo(actions.auth.logout.completed, this.loggedOut);
-    },
-    routeUpdate (routes) {
-      window.Intercom('update');
-    },
-    loggedIn (acct) {
-      let name = acct.extra_details.name;
-      let legacyName = [
-        acct.first_name, acct.last_name].filter(val => val).join(' ');
-      let userData = {
-        'user_id': [acct.username, window.location.host].join('@'),
-        'username': acct.username,
-        'email': acct.email,
-        'name': name ? name : legacyName ? legacyName : acct.username,
-        'created_at': Math.floor(
-          (new Date(acct.date_joined)).getTime() / 1000),
-        'app_id': window.IntercomAppId
-      }
-      window.Intercom('boot', userData);
-    },
-    loggedOut () {
-      window.Intercom('shutdown');
-    }
-  });
-}
-
 assign(stores, {
   tags: tagsStore,
   pageState: pageStateStore,
@@ -535,5 +491,3 @@ assign(stores, {
   surveyState: surveyStateStore,
   serverEnvironment: serverEnvironmentStore,
 });
-
-module.exports = stores;

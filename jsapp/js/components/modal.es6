@@ -1,25 +1,43 @@
+/**
+ * Custom modal component for displaying complex modals.
+ *
+ * It allows for displaying single modal at a time, as there is only single
+ * modal element with adjustable title content.
+ *
+ * To display a modal, you need to use `pageState` store with `showModal` method:
+ *
+ * ```
+ * stores.pageState.showModal({
+ *   type: MODAL_TYPES.NEW_FORM
+ * });
+ * ```
+ *
+ * Each modal type uses different props, you can add them in the above object.
+ *
+ * There are also two other important methods: `hideModal` and `switchModal`.
+ */
+
 import React from 'react';
 import reactMixin from 'react-mixin';
 import autoBind from 'react-autobind';
 import Reflux from 'reflux';
 import alertify from 'alertifyjs';
-import {dataInterface} from '../dataInterface';
-import actions from '../actions';
-import bem from '../bem';
+import {actions} from '../actions';
+import {bem} from '../bem';
 import ui from '../ui';
-import stores from '../stores';
+import {stores} from '../stores';
 import {t} from '../utils';
 import {
   PROJECT_SETTINGS_CONTEXTS,
   MODAL_TYPES
 } from '../constants';
-import ProjectSettings from '../components/modalForms/projectSettings';
-import SharingForm from '../components/modalForms/sharingForm';
-import Submission from '../components/modalForms/submission';
-import TableColumnFilter from '../components/modalForms/tableColumnFilter';
-import TranslationSettings from '../components/modalForms/translationSettings';
-import TranslationTable from '../components/modalForms/translationTable';
-import RESTServicesForm from '../components/RESTServices/RESTServicesForm';
+import ProjectSettings from './modalForms/projectSettings';
+import Submission from './modalForms/submission';
+import TableColumnFilter from './modalForms/tableColumnFilter';
+import TranslationSettings from './modalForms/translationSettings';
+import TranslationTable from './modalForms/translationTable';
+import SharingForm from './permissions/sharingForm';
+import RESTServicesForm from './RESTServices/RESTServicesForm';
 
 class Modal extends React.Component {
   constructor(props) {
@@ -148,7 +166,11 @@ class Modal extends React.Component {
       title =  `${t('Submission Record')} (${index} ${t('of')} ${p.tableInfo.resultsTotal})`;
     } else {
       let index = p.ids.indexOf(sid);
-      title =  `${t('Submission Record')} (${index} ${t('of')} ${p.ids.length})`;
+      if (p.ids.length === 1) {
+          title = `${t('Submission Record')}`;
+      } else {
+          title = `${t('Submission Record')} (${index} ${t('of')} ${p.ids.length})`;
+      }
     }
 
     return title;
@@ -264,7 +286,11 @@ class Modal extends React.Component {
               />
             }
             { this.props.params.type == MODAL_TYPES.FORM_TRANSLATIONS_TABLE &&
-              <TranslationTable asset={this.props.params.asset} langIndex={this.props.params.langIndex} />
+              <TranslationTable
+                asset={this.props.params.asset}
+                langString={this.props.params.langString}
+                langIndex={this.props.params.langIndex}
+              />
             }
         </ui.Modal.Body>
       </ui.Modal>

@@ -9,6 +9,7 @@ $viewTemplates = require './view.templates'
 $viewUtils = require './view.utils'
 $viewChoices = require './view.choices'
 $viewParams = require './view.params'
+$viewMandatorySetting = require './view.mandatorySetting'
 $acceptedFilesView = require './view.acceptedFiles'
 $viewRowDetail = require './view.rowDetail'
 renderKobomatrix = require('js/formbuild/renderInBackbone').renderKobomatrix
@@ -18,8 +19,8 @@ alertify = require 'alertifyjs'
 L = require 'leaflet/dist/leaflet';
 L.Map.addInitHook ()->
             this.getContainer()._leaflet_map = this;
-            
-            
+
+
 streets = L.tileLayer(
   'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
   {
@@ -44,8 +45,10 @@ baseLayers = {
 };
 
 
-    
+
 controls = L.control.layers(baseLayers);
+
+
 
 module.exports = do ->
   class BaseRowView extends Backbone.View
@@ -53,8 +56,6 @@ module.exports = do ->
     className: "survey__row  xlf-row-view xlf-row-view--depr"
     events:
       "drop": "drop"
-     
-    
 
     initialize: (opts)->
       @options = opts
@@ -105,7 +106,7 @@ module.exports = do ->
       @
     _renderRow: ->
       @$el.html $viewTemplates.$$render('row.xlfRowView', @surveyView)
-      @$label = @$('.card__header-title')
+      @$label = @$('.js-card-label')
       @$hint = @$('.card__header-hint')
       @$card = @$('.card')
       @$header = @$('.card__header')
@@ -123,7 +124,7 @@ module.exports = do ->
           questionType: questionType
         }).render().insertInDOMAfter(@$header)
 
-      if questionType is 'calculate'
+      if questionType is 'calculate' or questionType is 'hidden'
         @$hint.hide()
 
       if 'getList' of @model and (cl = @model.getList())
@@ -148,22 +149,19 @@ module.exports = do ->
       if show is undefined
         show = !@_settingsExpanded
 
-      
       if show and !@_settingsExpanded
         @_expandedRender()
         @$card.addClass('card--expanded-settings')
         @hideMultioptions?()
         @_settingsExpanded = true
-      
 
-       
         if @model.attributes.type.getValue() == "geopoint" 
-             
+
             @map = L.map('default-response-map', {maxZoom: 17, scrollWheelZoom: false, preferCanvas: true });
-            
+
             streets.addTo(@map);
             controls.addTo(@map);
-            
+
             if @model.attributes.default.getValue()
                 coords = @model.attributes.default.getValue().split(" ");
             else 
@@ -171,7 +169,7 @@ module.exports = do ->
             @map.setView(coords, 12);
             console.log("map set")
             @marker = new L.marker(coords, {draggable:'true', bubblingMouseEvents:'true'});
-            
+
             @marker.on 'dragend', (event)=>
                marker = event.target;
                position = marker.getLatLng();
@@ -179,24 +177,23 @@ module.exports = do ->
                defaultinput = $('input[name="default"]')       
                defaultinput[0].value = "" + position.lat.toFixed(6) + " " +
                                             position.lng.toFixed(6) 
-               
-               
+
+
                #marker.setLatLng(new L.LatLng(position.lat, position.lng) );
                @map.flyTo(new L.LatLng(position.lat, position.lng));    
                @model.attributes.default.set('value', defaultinput[0].value);
-            
+
             # cache the marker layer in map object so it can be retrieved in view.rowDetail methods 
             @marker.on 'add', (event)=>
                marker = event.target;
                @map._marker = marker ;
-               
+
             @map.addLayer(@marker);
-            
-                        
+
+
       else if !show and @_settingsExpanded
         if @model.attributes.type.getValue() == "geopoint" and @map.options
             @map.remove()
-        
         @$card.removeClass('card--expanded-settings')
         @_cleanupExpandedRender()
         @_settingsExpanded = false
@@ -217,7 +214,7 @@ module.exports = do ->
 
     add_row_to_question_library: (evt) =>
       evt.stopPropagation()
-      @ngScope?.add_row_to_question_library @model
+      @ngScope?.add_row_to_question_library @model, @model.collection._parent._initialParams
 
   class GroupView extends BaseRowView
     className: "survey__row survey__row--group  xlf-row-view xlf-row-view--depr"
@@ -229,7 +226,7 @@ module.exports = do ->
 
     deleteGroup: (evt)=>
       skipConfirm = $(evt.currentTarget).hasClass('js-force-delete-group')
-      if skipConfirm or confirm(_t('Are you sure you want to split apart this group?'))
+      if skipConfirm or confirm(_t("Are you sure you want to split apart this group?"))
         @_deleteGroup()
       evt.preventDefault()
 
@@ -242,7 +239,7 @@ module.exports = do ->
     render: ->
       if !@already_rendered
         @$el.html $viewTemplates.row.groupView(@model)
-        @$label = @$('.card__header-title')
+        @$label = @$('.js-card-label')
         @$rows = @$('.group__rows').eq(0)
         @$card = @$('.card')
         @$header = @$('.card__header,.group__header').eq(0)
@@ -292,7 +289,15 @@ module.exports = do ->
       # don't display columns that start with a $
       hiddenFields = ['label', 'hint', 'type', 'select_from_list_name', 'kobo--matrix_list', 'parameters']
       for [key, val] in @model.attributesArray() when !key.match(/^\$/) and key not in hiddenFields
-        new $viewRowDetail.DetailView(model: val, rowView: @).render().insertInDOM(@)
+        if key is 'required'
+          @mandatorySetting = new $viewMandatorySetting.MandatorySettingView({
+            model: @model.get('required')
+          }).render().insertInDOM(@)
+        else if key is '_isRepeat' and @model.getValue('type') is 'kobomatrix'
+          # don't display repeat checkbox for matrix groups
+          continue
+        else
+          new $viewRowDetail.DetailView(model: val, rowView: @).render().insertInDOM(@)
 
       questionType = @model.get('type').get('typeId')
       if (
@@ -341,7 +346,7 @@ module.exports = do ->
       @$el.html $viewTemplates.row.koboMatrixView()
       @matrix = @$('.card__kobomatrix')
       renderKobomatrix(@, @matrix)
-      @$label = @$('.card__header-title')
+      @$label = @$('.js-card-label')
       @$card = @$('.card')
       @$header = @$('.card__header')
       context = {warnings: []}
@@ -379,7 +384,7 @@ module.exports = do ->
 
       if @model._scoreRows.length < 1
         @model._scoreRows.add
-          label: _t('Enter your question')
+          label: _t("Enter your question")
           name: ''
 
       score_rows = for sr in @model._scoreRows.models
@@ -528,7 +533,6 @@ module.exports = do ->
         cid: model.cid
       template_args.rank_rows = rank_rows
       extra_score_contents = $viewTemplates.$$render('row.rankView', @, template_args)
-      @$('.card--selectquestion__expansion').eq(0).append(extra_score_contents).addClass('js-cancel-select-row')
       @$('.card--selectquestion__expansion').eq(0).append(extra_score_contents).addClass('js-cancel-select-row')
       @editRanks()
     editRanks: ->

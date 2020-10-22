@@ -1,8 +1,19 @@
+/**
+ * A collection of miscellaneous utility functions.
+ *
+ * NOTE: these are used also by the Form Builder coffee code (see
+ * `jsapp/xlform/src/view.surveyApp.coffee`)
+ *
+ * TODO: group these functions by what are they doing or where are they mostly
+ * (or uniquely) used, and split to smaller files.
+ */
+
 import clonedeep from 'lodash.clonedeep';
 import moment from 'moment';
 import alertify from 'alertifyjs';
-import $ from 'jquery';
 import {Cookies} from 'react-cookie';
+// imporitng whole constants, as we override ROOT_URL in tests
+import constants from 'js/constants';
 
 export const LANGUAGE_COOKIE_NAME = 'django_language';
 
@@ -13,6 +24,16 @@ alertify.defaults.notifier.position = 'bottom-left';
 alertify.defaults.notifier.closeButton = true;
 
 const cookies = new Cookies();
+const modelUtils = require('../xlform/src/model.utils');
+
+const SLUGGIFY_LABEL_OPTIONS = {
+  lowerCase: false,
+  preventDuplicateUnderscores: true,
+  stripSpaces: true,
+  lrstrip: true,
+  incrementorPadding: 3,
+  validXmlTag: true
+};
 
 export function notify(msg, atype='success') {
   alertify.notify(msg, atype);
@@ -33,13 +54,12 @@ export function formatDate(timeStr) {
   return _m.format('ll');
 }
 
-export var anonUsername = 'AnonymousUser';
 export function getAnonymousUserPermission(permissions) {
   return permissions.filter(function(perm){
     if (perm.user__username === undefined) {
       perm.user__username = perm.user.match(/\/users\/(.*)\//)[1];
     }
-    return perm.user__username === anonUsername;
+    return perm.user__username === constants.ANON_USERNAME;
   })[0];
 }
 
@@ -51,8 +71,13 @@ export function surveyToValidJson(survey) {
   return JSON.stringify(survey.toFlatJSON());
 }
 
-// TRANSLATIONS HACK (Part 2/2):
-// this function reverses nullifying default language - use it just before saving
+
+/**
+ * This function reverses what `nullifyTranslations` did to the form data.
+ * @param {string} surveyDataJSON
+ * @param {object} assetContent
+ * @return {string} fixed surveyDataJSON
+ */
 export function unnullifyTranslations(surveyDataJSON, assetContent) {
   let surveyData = JSON.parse(surveyDataJSON);
 
@@ -61,6 +86,7 @@ export function unnullifyTranslations(surveyDataJSON, assetContent) {
      translatedProps = assetContent.translated;
   }
 
+  // TRANSLATIONS HACK (Part 2/2):
   // set default_language
   let defaultLang = assetContent.translations_0;
   if (!defaultLang) {
@@ -76,7 +102,7 @@ export function unnullifyTranslations(surveyDataJSON, assetContent) {
       surveyData.choices.forEach((choice) => {
         translatedProps.forEach((translatedProp) => {
           if (typeof choice[translatedProp] !== 'undefined') {
-            choice[`${translatedProp}::${defaultLang}`] = choice[translatedProp]
+            choice[`${translatedProp}::${defaultLang}`] = choice[translatedProp];
             delete choice[translatedProp];
           }
         });
@@ -86,7 +112,13 @@ export function unnullifyTranslations(surveyDataJSON, assetContent) {
       surveyData.survey.forEach((surveyRow) => {
         translatedProps.forEach((translatedProp) => {
           if (typeof surveyRow[translatedProp] !== 'undefined') {
-            surveyRow[`${translatedProp}::${defaultLang}`] = surveyRow[translatedProp]
+            if (typeof surveyData.settings[0] !== 'undefined'
+                && typeof surveyData.settings[0].style === 'string'
+                && surveyData.settings[0].style.includes('theme-grid')
+                && surveyRow.type === 'begin_group') {
+              delete surveyRow[translatedProp];
+            }
+            surveyRow[`${translatedProp}::${defaultLang}`] = surveyRow[translatedProp];
             delete surveyRow[translatedProp];
           }
         });
@@ -97,6 +129,23 @@ export function unnullifyTranslations(surveyDataJSON, assetContent) {
   return JSON.stringify(surveyData);
 }
 
+/**
+ * @typedef NullifiedTranslations
+ * @property {object} survey - Modified survey.
+ * @property {Array<string|null>} translations - Modified translations.
+ * @property {Array<string|null>} translations_0 - The original default language name.
+ */
+
+/**
+ * A function that adjust the translations data to the Form Builder code.
+ * Requires the sibling `unnullifyTranslations` function to be called before
+ * saving the form.
+ * @param {Array<string|null>} [translations]
+ * @param {Array<string>} translatedProps
+ * @param {Array<object>} survey
+ * @param {object} baseSurvey
+ * @return {NullifiedTranslations}
+ */
 export function nullifyTranslations(translations, translatedProps, survey, baseSurvey) {
   const data = {
     survey: clonedeep(survey),
@@ -147,7 +196,7 @@ export function nullifyTranslations(translations, translatedProps, survey, baseS
       data.survey.forEach((row) => {
         translatedProps.forEach((translatedProp) => {
           if (row[translatedProp]) {
-            let propVal = null
+            let propVal = null;
             if (row.name) {
               propVal = row.name;
             } else if (row.$autoname) {
@@ -162,8 +211,8 @@ export function nullifyTranslations(translations, translatedProps, survey, baseS
 
   // no need to nullify null
   if (data.translations[0] !== null) {
-    data.translations_0 = data.translations[0]
-    data.translations[0] = null
+    data.translations_0 = data.translations[0];
+    data.translations[0] = null;
   }
 
   return data;
@@ -171,6 +220,19 @@ export function nullifyTranslations(translations, translatedProps, survey, baseS
 
 export function redirectTo(href) {
   window.location.href = href;
+}
+
+// works universally for v1 and v2 urls
+export function getUsernameFromUrl(userUrl) {
+  return userUrl.match(/\/users\/(.*)\//)[1];
+}
+
+export function buildUserUrl(username) {
+  if (username.startsWith(window.location.protocol)) {
+    console.error("buildUserUrl() called with URL instead of username (incomplete v2 migration)");
+    return username;
+  }
+  return `${constants.ROOT_URL}/api/v2/users/${username}/`;
 }
 
 export function parsePermissions(owner, permissions) {
@@ -181,9 +243,14 @@ export function parsePermissions(owner, permissions) {
   }
   permissions.map((perm) => {
     perm.user__username = perm.user.match(/\/users\/(.*)\//)[1];
+    const codename = perm.permission.match(/\/permissions\/(.+)\//);
+    if (codename !== null) {
+      console.error("parsePermissions(): converting new-style permission URL to codename (incomplete v2 migration)");
+      perm.permission = codename[1];
+    }
     return perm;
   }).filter((perm)=> {
-    return ( perm.user__username !== owner && perm.user__username !== anonUsername);
+    return ( perm.user__username !== owner && perm.user__username !== constants.ANON_USERNAME);
   }).forEach((perm)=> {
     if(users.indexOf(perm.user__username) === -1) {
       users.push(perm.user__username);
@@ -223,17 +290,14 @@ window.log = log;
 var __strings = [];
 
 
-/*global gettext*/
-if (window.gettext) {
-  var _gettext = window.gettext;
-} else {
-  var _gettext = function(s){
-    return s;
-  };
-}
+/*a global gettext function*/
 export function t(str) {
-  return _gettext(str);
-};
+  if (window.gettext) {
+    return window.gettext(str);
+  } else {
+    return str;
+  }
+}
 
 
 const originalSupportEmail = 'help@kobotoolbox.org';
@@ -302,7 +366,7 @@ export var randString = function () {
 
 export function stringToColor(str, prc) {
   // Higher prc = lighter color, lower = darker
-  var prc = typeof prc === 'number' ? prc : -15;
+  prc = typeof prc === 'number' ? prc : -15;
   var hash = function(word) {
       var h = 0;
       for (var i = 0; i < word.length; i++) {
@@ -361,11 +425,53 @@ export function validFileTypes() {
   return VALID_ASSET_UPLOAD_FILE_TYPES.join(',');
 }
 
+/*
+ * Syncs the `choice_filter` of each cascading question to any changes made to
+ * dependent cascading question labels
+ */
+export function syncCascadeChoiceNames(params) {
+  let content = {};
+  if (params.content) {
+    content = JSON.parse(params.content);
+  }
+  if (params.source) {
+    content = JSON.parse(params.source);
+  }
+
+  if (!content.survey) {
+    return params;
+  }
+
+  for(var i = 0; i < content.survey.length; i++) {
+    var sluggifiedLabel;
+    if (content.survey[i].name !== undefined && content.survey[i].label !== undefined) {
+      sluggifiedLabel = modelUtils.sluggify(content.survey[i].label, SLUGGIFY_LABEL_OPTIONS);
+      content.survey[i].name = sluggifiedLabel;
+    }
+    if (content.survey[i].choice_filter !== undefined && content.survey[i - 1].label !== undefined) {
+      var choiceQuestion = '' + content.survey[i].choice_filter.split('=')[0];
+      sluggifiedLabel = modelUtils.sluggify(content.survey[i - 1].label, SLUGGIFY_LABEL_OPTIONS);
+      var choiceLabel = '=${' + sluggifiedLabel + '}';
+      content.survey[i].choice_filter = choiceQuestion + choiceLabel;
+    }
+  }
+
+  if (params.content) {
+    params.content = JSON.stringify(content);
+  }
+  if (params.source) {
+    params.source = JSON.stringify(content);
+  }
+  return params;
+
+}
+
 export function koboMatrixParser(params) {
+  let content = {};
   if (params.content)
-    var content = JSON.parse(params.content);
+    content = JSON.parse(params.content);
   if (params.source)
-    var content = JSON.parse(params.source);
+    content = JSON.parse(params.source);
 
   if (!content.survey)
     return params;
@@ -464,4 +570,16 @@ export function writeParameters(obj) {
     }
   });
   return params.join(';');
+}
+
+export function renderCheckbox(id, label, isImportant) {
+  let additionalClass = '';
+  if (isImportant) {
+    additionalClass += 'alertify-toggle-important';
+  }
+  return `<div class="alertify-toggle checkbox ${additionalClass}"><label class="checkbox__wrapper"><input type="checkbox" class="checkbox__input" id="${id}"><span class="checkbox__label">${label}</span></label></div>`;
+};
+
+export function launchPrinting() {
+  window.print();
 }

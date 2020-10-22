@@ -4,12 +4,11 @@ import PropTypes from 'prop-types';
 import reactMixin from 'react-mixin';
 import autoBind from 'react-autobind';
 import Reflux from 'reflux';
-import _ from 'underscore';
-import bem from '../bem';
-import stores from '../stores';
+import {bem} from '../bem';
+import {stores} from '../stores';
 import { Link, hashHistory } from 'react-router';
 import mixins from '../mixins';
-
+import {PERMISSIONS_CODENAMES} from 'js/constants';
 import {
   t,
   assign,
@@ -53,7 +52,7 @@ class FormViewTabs extends Reflux.Component {
 
     return (
       <bem.FormView__toptabs>
-        { a.deployment__identifier != undefined && a.has_deployment && this.userCan('view_submissions', a) &&
+        { a.deployment__identifier != undefined && a.has_deployment && (this.userCan('view_submissions', a) || this.userCan('partial_submissions', a)) &&
           <Link
             to={`/forms/${this.state.assetid}/summary`}
             className='form-view__tab'
@@ -67,10 +66,7 @@ class FormViewTabs extends Reflux.Component {
           activeClassName='active'>
           {t('Form')}
         </Link>
-        <bem.FormView__tab className='is-edge' m='summary'>
-          {t('Summary')}
-        </bem.FormView__tab>
-        { a.deployment__identifier != undefined && a.has_deployment && a.deployment__submission_count > 0 && this.userCan('view_submissions', a) &&
+        { a.deployment__identifier != undefined && a.has_deployment && a.deployment__submission_count > 0 && (this.userCan('view_submissions', a) || this.userCan('partial_submissions', a)) &&
           <Link
             to={`/forms/${this.state.assetid}/data`}
             className='form-view__tab'
@@ -101,7 +97,6 @@ class FormViewTabs extends Reflux.Component {
     if (this.state.asset && this.state.asset.has_deployment && this.isActiveRoute(`/forms/${this.state.assetid}/data`)) {
       sideTabs = [
         {label: t('Reports'), icon: 'k-icon-report', path: `/forms/${this.state.assetid}/data/report`},
-        {label: t('Reports (legacy)'), icon: 'k-icon-report', path: `/forms/${this.state.assetid}/data/report-legacy`, className: 'is-edge'},
         {label: t('Table'), icon: 'k-icon-table', path: `/forms/${this.state.assetid}/data/table`},
         {label: t('Gallery'), icon: 'k-icon-photo-gallery', path: `/forms/${this.state.assetid}/data/gallery`},
         {label: t('Downloads'), icon: 'k-icon-download', path: `/forms/${this.state.assetid}/data/downloads`},
@@ -109,14 +104,25 @@ class FormViewTabs extends Reflux.Component {
       ];
     }
 
-    if (this.state.asset && this.state.asset.deployment__active && this.isActiveRoute(`/forms/${this.state.assetid}/settings`)) {
-       sideTabs = [
-          {label: t('General'), icon: 'k-icon-settings', path: `/forms/${this.state.assetid}/settings`},
-          {label: t('Media'), icon: 'k-icon-photo-gallery', path: `/forms/${this.state.assetid}/settings/media`},
-          {label: t('Sharing'), icon: 'k-icon-share', path: `/forms/${this.state.assetid}/settings/sharing`},
-          {label: t('REST Services'), icon: 'k-icon-data-sync', path: `/forms/${this.state.assetid}/settings/rest`},
-          {label: t('Kobocat (legacy)'), icon: 'k-icon-settings', path: `/forms/${this.state.assetid}/settings/kobocat`, className: 'is-edge'},
-        ];
+    if (this.state.asset && this.isActiveRoute(`/forms/${this.state.assetid}/settings`)) {
+      sideTabs = [];
+
+      sideTabs.push({label: t('General'), icon: 'k-icon-settings', path: `/forms/${this.state.assetid}/settings`});
+
+      //TODO:Remove owner only access to settings/media after we remove KC iframe: https://github.com/kobotoolbox/kpi/issues/2647#issuecomment-624301693
+      if (this.state.asset.deployment__active && mixins.permissions.userIsOwner(this.state.asset)) {
+        sideTabs.push({label: t('Media'), icon: 'k-icon-photo-gallery', path: `/forms/${this.state.assetid}/settings/media`});
+      }
+
+      sideTabs.push({label: t('Sharing'), icon: 'k-icon-share', path: `/forms/${this.state.assetid}/settings/sharing`});
+
+      if (
+        this.state.asset.deployment__active &&
+        mixins.permissions.userCan(PERMISSIONS_CODENAMES.get('view_submissions'), this.state.asset) &&
+        mixins.permissions.userCan(PERMISSIONS_CODENAMES.get('change_asset'), this.state.asset)
+      ) {
+        sideTabs.push({label: t('REST Services'), icon: 'k-icon-data-sync', path: `/forms/${this.state.assetid}/settings/rest`});
+      }
     }
 
     if (sideTabs.length > 0) {
@@ -128,7 +134,7 @@ class FormViewTabs extends Reflux.Component {
               key={ind}
               activeClassName='active'
               onlyActiveOnIndex
-              className={`form-view__tab ${item.className}`}
+              className='form-view__tab'
               data-path={item.path}
               onClick={this.triggerRefresh}>
                 <i className={item.icon} />

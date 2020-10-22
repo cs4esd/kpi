@@ -1,8 +1,15 @@
-/*eslint new-cap: 0*/
-/*eslint no-multi-spaces: 0*/
+/**
+ * A list of all our BEM components. It helps avoiding errors and code bloat.
+ * Instead of writing BEM class names for `<div>`, please import this module and
+ * use `<bem.ModuleName__partial m={['modifier1', 'modifier2']}>` in your JSX.
+ */
 
-var BEM = require('./libs/react-create-bem-element');
-var bem = BEM.init();
+import {BEM} from './libs/react-create-bem-element';
+export const bem = BEM.init();
+
+bem.Button = BEM('mdl-button', '<button>');
+
+bem.KoboButton = BEM('kobo-button', '<button>');
 
 bem.PageWrapper = BEM('page-wrapper');
 bem.PageWrapper__content = bem.PageWrapper.__('content');
@@ -31,6 +38,7 @@ bem.AssetRow__typeIcon  = bem.AssetRow.__('type-icon', '<span>');
 bem.ServiceRow = BEM('service-row');
 bem.ServiceRow__column = bem.ServiceRow.__('column');
 bem.ServiceRow__actionButton = bem.ServiceRow.__('action-button', '<button>');
+bem.ServiceRow__linkOverlay = bem.ServiceRow.__('link-overlay', '<a>');
 bem.ServiceRowButton = BEM('service-row-button', '<button>');
 
 bem.FormBuilder = bem('formBuilder');
@@ -38,6 +46,7 @@ bem.FormBuilder__row = bem.FormBuilder.__('row');
 bem.FormBuilder__contents = bem.FormBuilder.__('contents');
 
 bem.FormBuilderMeta = bem('form-builder-meta');
+bem.FormBuilderMeta__columns = bem.FormBuilderMeta.__('columns');
 bem.FormBuilderMeta__column = bem.FormBuilderMeta.__('column');
 bem.FormBuilderMeta__row = bem.FormBuilderMeta.__('row');
 
@@ -52,10 +61,6 @@ bem.FormBuilderHeader__cell = bem.FormBuilderHeader.__('cell');
 bem.FormBuilderHeader__item = bem.FormBuilderHeader.__('item', '<span>');
 bem.FormBuilderHeader__button = bem.FormBuilderHeader.__('button', '<button>');
 bem.FormBuilderHeader__close = bem.FormBuilderHeader.__('close', '<button>');
-
-bem.FormMeta = bem('form-meta');
-bem.FormMeta__content = bem.FormMeta.__('content');
-bem.FormMeta__button = bem.FormMeta.__('button');
 
 bem.Search = BEM('search');
 bem.Search__icon = bem.Search.__('icon', '<i>');
@@ -84,6 +89,12 @@ bem.LibList__tag = bem.LibList.__('tag', '<span>');
 bem.LibList__label = bem.LibList.__('label');
 bem.LibList__dragbox = bem.LibList.__('dragbox');
 bem.LibList__qtype = bem.LibList.__('qtype');
+
+bem.SubmissionDataTable = bem('submission-data-table');
+bem.SubmissionDataTable__row = bem.SubmissionDataTable.__('row');
+bem.SubmissionDataTable__column = bem.SubmissionDataTable.__('column');
+bem.SubmissionDataTable__XMLName = bem.SubmissionDataTable.__('xml-name');
+bem.SubmissionDataTable__value = bem.SubmissionDataTable.__('value');
 
 bem.CollectionsWrapper = bem('collections-wrapper');
 
@@ -169,7 +180,6 @@ bem.FormTitle__submissions = bem.FormTitle.__('submissions');
 
 bem.ReportView = BEM('report-view');
 bem.ReportView__wrap = bem.ReportView.__('wrap');
-bem.ReportView__warning = bem.ReportView.__('warning');
 bem.ReportView__item = bem.ReportView.__('item');
 bem.ReportView__itemHeading = bem.ReportView.__('itemHeading');
 bem.ReportView__headingMeta = bem.ReportView.__('headingMeta');
@@ -196,8 +206,8 @@ bem.Modal__header = bem.Modal.__('header', '<header>');
 bem.Modal__title = bem.Modal.__('title', '<h4>');
 bem.Modal__subheader = bem.Modal.__('subheader', '<header>');
 bem.Modal__footer = bem.Modal.__('footer', '<footer>');
-bem.Modal__footerButton = bem.Modal.__('footer-button', '<button>');
 bem.Modal__tabs = bem.Modal.__('tabs');
+bem.Modal__hr = bem.Modal.__('hr', '<hr>');
 
 bem.PopoverMenu = bem('popover-menu');
 bem.PopoverMenu__content = bem.PopoverMenu.__('content');
@@ -211,8 +221,6 @@ bem.Header = BEM('header');
 bem.Header__logo = bem.Header.__('logo', '<span>');
 
 bem.AccountBox = BEM('account-box');
-bem.AccountBox__notifications = bem.AccountBox.__('notifications');
-bem.AccountBox__notifications__count = bem.AccountBox.__('notifications__count', '<span>');
 bem.AccountBox__name = bem.AccountBox.__('name', '<div>');
 bem.AccountBox__initials = bem.AccountBox.__('initials', '<span>');
 bem.AccountBox__menu = bem.AccountBox.__('menu', '<ul>');
@@ -225,27 +233,42 @@ bem.AccountSettings__left = bem.AccountSettings.__('left');
 bem.AccountSettings__right = bem.AccountSettings.__('right');
 bem.AccountSettings__item = bem.FormModal.__('item');
 bem.AccountSettings__desc = bem.AccountSettings.__('desc');
-
-bem.ChangePassword = BEM('change-password');
-bem.ChangePassword__item = bem.FormModal.__('item');
+bem.AccountSettings__actions = bem.AccountSettings.__('actions');
 
 bem.UserRow = BEM('user-row');
+bem.UserRow__info = bem.UserRow.__('info');
 bem.UserRow__avatar = bem.UserRow.__('avatar');
 bem.UserRow__name = bem.UserRow.__('name');
 bem.UserRow__email = bem.UserRow.__('email');
-bem.UserRow__role = bem.UserRow.__('role');
-bem.UserRow__cancel = bem.UserRow.__('cancel');
+bem.UserRow__perms = bem.UserRow.__('perms');
+bem.UserRow__perm = bem.UserRow.__('perm');
+bem.UserRow__editor = bem.UserRow.__('editor');
 
 bem.uiPanel = BEM('ui-panel');
 bem.uiPanel__body = bem.uiPanel.__('body');
 
-bem.Drawer = bem('drawer');
+bem.KDrawer = bem('k-drawer');
+bem.KDrawer__primaryIcons = bem.KDrawer.__('primary-icons', 'nav');
+bem.KDrawer__secondaryIcons = bem.KDrawer.__('secondary-icons', 'nav');
+bem.KDrawer__sidebar = bem.KDrawer.__('sidebar', 'aside');
+
+bem.HelpBubble = bem('help-bubble');
+bem.HelpBubble__close = bem.HelpBubble.__('close', 'button');
+bem.HelpBubble__back = bem.HelpBubble.__('back', 'button');
+bem.HelpBubble__trigger = bem.HelpBubble.__('trigger', 'button');
+bem.HelpBubble__triggerCounter = bem.HelpBubble.__('trigger-counter', 'span');
+bem.HelpBubble__popup = bem.HelpBubble.__('popup');
+bem.HelpBubble__popupContent = bem.HelpBubble.__('popup-content');
+bem.HelpBubble__row = bem.HelpBubble.__('row');
+bem.HelpBubble__rowAnchor = bem.HelpBubble.__('row', 'a');
+bem.HelpBubble__rowWrapper = bem.HelpBubble.__('row-wrapper');
 
 bem.tagSelect = BEM('tag-select');
 bem.collectionFilter = BEM('collection-filter');
 
 bem.TextBox = BEM('text-box', '<label>');
 bem.TextBox__label = bem.TextBox.__('label');
+bem.TextBox__labelLink = bem.TextBox.__('label-link', '<a>');
 bem.TextBox__input = bem.TextBox.__('input', '<input>');
 bem.TextBox__description = bem.TextBox.__('description');
 bem.TextBox__error = bem.TextBox.__('error');
@@ -273,5 +296,3 @@ bem.GitRev = BEM('git-rev');
 bem.GitRev__item = bem.GitRev.__('item', '<div>');
 
 bem.create = BEM;
-
-export default bem;

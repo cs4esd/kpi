@@ -8,20 +8,20 @@ import alertify from 'alertifyjs';
 import editableFormMixin from '../editorMixins/editableForm';
 import moment from 'moment';
 import Checkbox from './checkbox';
-import bem from '../bem';
+import {bem} from '../bem';
 import DocumentTitle from 'react-document-title';
-import mixins from '../mixins';
-import actions from '../actions';
 import {dataInterface} from '../dataInterface';
 import {
   t,
+  log,
   redirectTo,
   formatTime,
 } from '../utils';
 import {
+  ROOT_URL,
   update_states,
   ASSET_TYPES
-} from '../constants';
+} from 'js/constants';
 
 const newFormMixins = [
     Reflux.ListenerMixin,
@@ -47,15 +47,16 @@ export class ProjectDownloads extends React.Component {
     autoBind(this);
   }
   handleChange (e, attr) {
+    let val;
     if (e.target) {
-      if (e.target.type == 'checkbox') {
-        var val = e.target.checked;
+      if (e.target.type === 'checkbox') {
+        val = e.target.checked;
       } else {
-        var val = e.target.value;
+        val = e.target.value;
       }
     } else {
       // react-select just passes a string
-      var val = e;
+      val = e;
     }
     this.setState({[attr]: val});
   }
@@ -76,11 +77,7 @@ export class ProjectDownloads extends React.Component {
     }.bind(this), 5000);
 
     if (this.state.type.indexOf('_legacy') < 0) {
-      let url = this.props.asset.deployment__data_download_links[
-        this.state.type
-      ];
       if (['xls', 'csv', 'spss_labels'].includes(this.state.type)) {
-        url = `${dataInterface.rootUrl}/exports/`; // TODO: have the backend pass the URL in the asset
         let postData = {
           source: this.props.asset.url,
           type: this.state.type,
@@ -94,12 +91,10 @@ export class ProjectDownloads extends React.Component {
             group_sep: this.state.groupSep
           });
         }
-        $.ajax({
-          method: 'POST',
-          url: url,
-          data: postData
-        }).done((data) => {
-          $.ajax({url: data.url}).then((taskData) => {
+        dataInterface.createExport(postData).done((data) => {
+          // TODO: have the backend pass this URL in the asset, so there is no
+          // need to requestExports first
+          $.ajax({url: data.url}).then(() => {
             // this.checkForFastExport(data.url);
             this.getExports();
           }).fail((taskFail) => {
@@ -111,6 +106,7 @@ export class ProjectDownloads extends React.Component {
           log('export creation failed', failData);
         });
       } else {
+        const url = this.props.asset.deployment__data_download_links[this.state.type];
         redirectTo(url);
       }
     }
@@ -165,7 +161,7 @@ export class ProjectDownloads extends React.Component {
     dataInterface.getAssetExports(this.props.asset.uid).done((data)=>{
       if (data.count > 0) {
         data.results.reverse();
-        data.results.map(result => {
+        data.results.map((result) => {
           if (result.data.type === 'spss_labels') {
             // Some old SPSS exports may have a meaningless `lang` attribute --
             // disregard it
@@ -223,7 +219,7 @@ export class ProjectDownloads extends React.Component {
           alertify.error(t('Failed to delete export.'));
         });
       },
-      oncancel: () => {dialog.destroy()}
+      oncancel: () => {dialog.destroy();}
     };
     dialog.set(opts).show();
 
@@ -313,7 +309,7 @@ export class ProjectDownloads extends React.Component {
                     <bem.FormModal__item key={'s'} m='export-submit'>
                       <input type='submit'
                         value={t('Export')}
-                        className='mdl-button mdl-js-button mdl-button--raised mdl-button--colored'
+                        className='kobo-button kobo-button--blue'
                         disabled={this.state.formSubmitDisabled}/>
                     </bem.FormModal__item>
                   ]}
@@ -392,7 +388,7 @@ export class ProjectDownloads extends React.Component {
       </DocumentTitle>
     );
   }
-};
+}
 
 export class AddToLibrary extends React.Component {
   constructor(props) {

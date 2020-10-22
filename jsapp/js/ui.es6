@@ -1,10 +1,17 @@
+/**
+ * A collection of small and generic UI components. The main idea is to not
+ * invent a wheel every time, keep things DRY and consistent throughout the app.
+ *
+ * TODO: would be best to split those to separate files in `jsapp/js/components/generic` directory.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom';
 import reactMixin from 'react-mixin';
 import autoBind from 'react-autobind';
 import _ from 'underscore';
-
-import bem from './bem';
+import {KEY_CODES} from 'js/constants';
+import {bem} from './bem';
 import {t, assign} from './utils';
 import classNames from 'classnames';
 
@@ -57,7 +64,7 @@ class Modal extends React.Component {
     document.removeEventListener('keydown', this.escFunction);
   }
   escFunction (evt) {
-    if (evt.keyCode === 27 || evt.key === 'Escape') {
+    if (evt.keyCode === KEY_CODES.ESC || evt.key === 'Escape') {
       this.props.onClose.call(evt);
     }
   }
@@ -84,10 +91,7 @@ class Modal extends React.Component {
   }
   render() {
     return (
-      <bem.Modal__backdrop
-        className='modal__backdrop'
-        onClick={this.backdropClick}
-      >
+      <bem.Modal__backdrop onClick={this.backdropClick}>
         <div className={classNames(
           'modal',
           this.props.className,
@@ -214,7 +218,6 @@ class PopoverMenu extends React.Component {
       popoverHiding: false,
       placement: 'below'
     });
-    this.MAX_ASSETROW_MENU_HEIGHT = 300;
     this._mounted = false;
     autoBind(this);
   }
@@ -225,8 +228,7 @@ class PopoverMenu extends React.Component {
     this._mounted = false;
   }
   toggle(evt) {
-    var isBlur = evt.type === 'blur',
-        $popoverMenu;
+    var isBlur = evt.type === 'blur';
 
     if (isBlur && this.props.blurEventDisabled)
       return false;
@@ -244,7 +246,6 @@ class PopoverMenu extends React.Component {
     }
 
     if (this.state.popoverVisible || isBlur) {
-        $popoverMenu = $(evt.target).parents('.popover-menu').find('.popover-menu__content');
         this.setState({
           popoverHiding: true
         });
@@ -266,8 +267,11 @@ class PopoverMenu extends React.Component {
 
     if (this.props.type == 'assetrow-menu' && !this.state.popoverVisible) {
       this.props.popoverSetVisible();
-      const $assetRowTopOffset = $(evt.target).parents('.asset-row').offset().top;
-      if ($assetRowTopOffset > this.MAX_ASSETROW_MENU_HEIGHT) {
+      // if popover doesn't fit above, place it below
+      // 20px is a nice safety margin
+      const $assetRow = $(evt.target).parents('.asset-row');
+      const $popoverMenu = $(evt.target).parents('.popover-menu').find('.popover-menu__content');
+      if ($assetRow.offset().top > $popoverMenu.outerHeight() + $assetRow.outerHeight() + 20) {
         this.setState({placement: 'above'});
       } else {
         this.setState({placement: 'below'});
@@ -296,7 +300,25 @@ class PopoverMenu extends React.Component {
   }
 };
 
+class AccessDeniedMessage extends React.Component {
+  render() {
+    return (
+      <bem.FormView>
+        <bem.Loading>
+          <bem.Loading__inner>
+            <h3>
+              {t('Access Denied')}
+            </h3>
+            {t('You do not have permission to view this page.')}
+          </bem.Loading__inner>
+        </bem.Loading>
+      </bem.FormView>
+    );
+  }
+}
+
 var ui = {
+  AccessDeniedMessage,
   SearchBox: SearchBox,
   Panel: Panel,
   Modal: Modal,

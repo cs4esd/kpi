@@ -12,10 +12,10 @@ require 'leaflet/dist/leaflet.css';
 require 'leaflet.markercluster/dist/leaflet.markercluster';
 require 'leaflet.markercluster/dist/MarkerCluster.css';
 
-
 $viewRowDetailSkipLogic = require './view.rowDetail.SkipLogic'
 $viewTemplates = require './view.templates'
 _t = require('utils').t
+
 
 streets = L.tileLayer(
   'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -43,12 +43,8 @@ baseLayers = {
 controls = L.control.layers(baseLayers);
 
 
-  
 module.exports = do ->
   viewRowDetail = {}
-
- 
-
 
   class viewRowDetail.DetailView extends Backbone.View
     ###
@@ -65,37 +61,35 @@ module.exports = do ->
       @$el.addClass(@extraClass)
 
     mapModal: (opts={})->
-         
+
          el = opts.el || @$('input[name="default"]')
          $el = $(el)
-                 
+
          $el.on 'change', (changeEvnt)=>
-         
+
             mapcontainer = $('#default-response-map');   
             map = mapcontainer[0]._leaflet_map;  
             marker = map._marker ;
-           
+
             defaultinput = $('input[name="default"]')
             coords = defaultinput[0].value.split(" ");
             marker.setLatLng(new L.LatLng(coords[0], coords[1]),{draggable:'true'});
             map.flyTo(coords);
-      
-        
+
+
     render: ()->
       rendered = @html()
       if rendered
         @$el.html rendered
-      
+
       if @model.key == "default"
         console.log("default row rendered")
-           
+
 
       @afterRender && @afterRender()
-      @    
-  
+      @
     html: ()->
       $viewTemplates.$$render('xlfDetailView', @)
-    
     listenForCheckboxChange: (opts={})->
       el = opts.el || @$('input[type=checkbox]').get(0)
       $el = $(el)
@@ -169,9 +163,6 @@ module.exports = do ->
       @_insertInDOM rowView.defaultRowDetailParent
 
   viewRowDetail.Templates = {
-  
-    
-    
     textbox: (cid, key, key_label = key, input_class = '') ->
       @field """<input type="text" name="#{key}" id="#{cid}" class="#{input_class}" />""", cid, key_label
 
@@ -179,9 +170,9 @@ module.exports = do ->
       tags = """<input type="text"  name="#{key}" id="#{cid}" class="#{input_class}" />""" 
       tags += """<div id="default-response-map" class="map map-home leaflet-container leaflet-touch leaflet-fade-anim leaflet-grab leaflet-touch-drag leaflet-touch-zoom" style="height: 300px; margin-top: 10px; position: relative; outline: none;" tabindex="0">"""
       @field tags, cid, key_label
-     
-      
-    checkbox: (cid, key, key_label = key, input_label = _t('Yes')) ->
+
+
+    checkbox: (cid, key, key_label = key, input_label = _t("Yes")) ->
       input_label = input_label
       @field """<input type="checkbox" name="#{key}" id="#{cid}"/> <label for="#{cid}">#{input_label}</label>""", cid, key_label
 
@@ -208,15 +199,10 @@ module.exports = do ->
         <label for="#{cid}">#{key_label}:</label>
         <span class="settings__input">
           #{input}
-        </span>    
-        
-       
-
+        </span>
       </div>
-
       """
   }
-
 
   viewRowDetail.DetailViewMixins = {}
 
@@ -343,7 +329,7 @@ module.exports = do ->
         @model.set 'value', value
         @model.deduplicate @model.getSurvey()
       )
-      update_view = () => @$el.find('input').eq(0).val(@model.get("value") || $modelUtils.sluggifyLabel @model._parent.getValue('label'))
+      update_view = () => @$el.find('input').eq(0).val($modelUtils.sluggifyLabel @model._parent.getValue('label') || @model.get("value"))
       update_view()
 
       @model._parent.get('label').on 'change:value', update_view
@@ -383,16 +369,16 @@ module.exports = do ->
       @$el.find('input.hxlTag').select2({
           tags:$hxl.dict,
           maximumSelectionSize: 1,
-          placeholder: _t('#tag'),
+          placeholder: _t("#tag"),
           tokenSeparators: ['+',',', ':'],
-          formatSelectionTooBig: _t('Only one HXL tag allowed per question. ')
+          formatSelectionTooBig: _t("Only one HXL tag allowed per question. ")
           createSearchChoice: @_hxlTagCleanup
         })
       @$el.find('input.hxlAttrs').select2({
           tags:[],
           tokenSeparators: ['+',',', ':'],
-          formatNoMatches: _t('Type attributes for this tag'),
-          placeholder: _t('Attributes'),
+          formatNoMatches: _t("Type attributes for this tag"),
+          placeholder: _t("Attributes"),
           createSearchChoice: @_hxlAttrCleanup
           allowClear: 1
         })
@@ -446,7 +432,7 @@ module.exports = do ->
       term = term.replace(regex, '').toLowerCase()
       return {id: term, text: term}
 
- 
+
   viewRowDetail.DetailViewMixins.default =
     html: ->
       @fieldTab = "active"
@@ -460,7 +446,7 @@ module.exports = do ->
          return viewRowDetail.Templates.textWithMap @cid, @model.key, label, 'testWithMap'  
       else
          return  viewRowDetail.Templates.textbox @cid, @model.key, label, 'text'
-      
+
     afterRender: ->
       @$el.find('input').eq(0).val(@model.get("value"))
       defaultValue = @model.get("value")
@@ -468,7 +454,7 @@ module.exports = do ->
       if modeltype == "geopoint" 
          @mapModal( { dval: defaultValue } )
          @listenForInputChange()
-          
+
       else  
          @listenForInputChange()
 
@@ -483,12 +469,10 @@ module.exports = do ->
     afterRender: ->
       @listenForCheckboxChange()
 
+  # handled by mandatorySettingSelector
   viewRowDetail.DetailViewMixins.required =
-    html: ->
-      @$el.addClass("card__settings__fields--active")
-      viewRowDetail.Templates.checkbox @cid, @model.key, _t("Mandatory response")
-    afterRender: ->
-      @listenForCheckboxChange()
+    html: -> false
+    insertInDOM: -> return
 
   viewRowDetail.DetailViewMixins.appearance =
     getTypes: () ->

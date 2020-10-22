@@ -1,6 +1,5 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import reactMixin from 'react-mixin';
 import autoBind from 'react-autobind';
 import $ from 'jquery';
 import Select from 'react-select';
@@ -8,163 +7,49 @@ import _ from 'underscore';
 import DocumentTitle from 'react-document-title';
 import Checkbox from '../components/checkbox';
 import SurveyScope from '../models/surveyScope';
-import cascadeMixin from './cascadeMixin';
+import {cascadeMixin} from './cascadeMixin';
 import AssetNavigator from './assetNavigator';
-import {Link, hashHistory} from 'react-router';
+import {hashHistory} from 'react-router';
 import alertify from 'alertifyjs';
 import ProjectSettings from '../components/modalForms/projectSettings';
+import MetadataEditor from 'js/components/metadataEditor';
+import {removeInvalidChars} from 'js/assetUtils';
 import {
   surveyToValidJson,
   unnullifyTranslations,
-  notify,
   assign,
   t,
-  koboMatrixParser
+  koboMatrixParser,
+  syncCascadeChoiceNames
 } from '../utils';
-
 import {
   ASSET_TYPES,
   AVAILABLE_FORM_STYLES,
   PROJECT_SETTINGS_CONTEXTS,
   update_states,
+  NAME_MAX_LENGTH
 } from '../constants';
-
 import ui from '../ui';
-import bem from '../bem';
-import stores from '../stores';
-import actions from '../actions';
+import {bem} from '../bem';
+import {stores} from '../stores';
+import {actions} from '../actions';
 import dkobo_xlform from '../../xlform/src/_xlform.init';
 import {dataInterface} from '../dataInterface';
 
 const ErrorMessage = bem.create('error-message');
 const ErrorMessage__strong = bem.create('error-message__header', '<strong>');
-const ErrorMessage__link = bem.create('error-message__link', '<a>');
 
-var webformStylesSupportUrl = 'http://help.kobotoolbox.org/creating-forms/formbuilder/using-alternative-enketo-web-form-styles';
+const WEBFORM_STYLES_SUPPORT_URL = 'alternative_enketo.html';
 
-class FormSettingsEditor extends React.Component {
-  constructor(props) {
-    super(props);
-    autoBind(this);
-  }
-
-  render () {
-    return (
-      <bem.FormBuilderMeta>
-        <bem.FormBuilderMeta__column>
-          {this.props.meta.map((mtype) => {
-            if (!mtype.key) {
-              mtype.key = `meta-${mtype.name}`;
-            }
-            return (
-              <Checkbox
-                key={mtype.key}
-                label={mtype.label}
-                checked={mtype.value}
-                onChange={this.props.onCheckboxChange.bind(this, mtype.name)}
-              />
-            );
-          })}
-        </bem.FormBuilderMeta__column>
-        <bem.FormBuilderMeta__column>
-          {this.props.phoneMeta.map((mtype) => {
-            if (!mtype.key) {
-              mtype.key = `meta-${mtype.name}`;
-            }
-            return (
-              <Checkbox
-                key={mtype.key}
-                label={mtype.label}
-                checked={mtype.value}
-                onChange={this.props.onCheckboxChange.bind(this, mtype.name)}
-              />
-            );
-          })}
-        </bem.FormBuilderMeta__column>
-      </bem.FormBuilderMeta>
-    );
-  }
-  focusSelect () {
-    this.refs.webformStyle.focus();
-  }
-};
-
-class FormSettingsBox extends React.Component {
-  constructor(props) {
-    super(props);
-    var formId = this.props.survey.settings.get('form_id');
-    this.state = {
-      xform_id_string: formId,
-      meta: [],
-      phoneMeta: []
-    };
-    this.META_PROPERTIES = ['start', 'end', 'today', 'deviceid'];
-    this.PHONE_META_PROPERTIES = ['username', 'simserial', 'subscriberid', 'phonenumber'];
-    autoBind(this);
-  }
-
-  componentDidMount() {
-    this.updateState();
-  }
-
-  updateState(newState={}) {
-    this.META_PROPERTIES.forEach(this.passValueIntoObj('meta', newState));
-    this.PHONE_META_PROPERTIES.map(this.passValueIntoObj('phoneMeta', newState));
-    this.setState(newState);
-  }
-
-  getSurveyDetail(sdId) {
-    return this.props.survey.surveyDetails.filter(function(sd){
-      return sd.attributes.name === sdId;
-    })[0];
-  }
-
-  passValueIntoObj(category, newState) {
-    newState[category] = [];
-    return (id) => {
-      var sd = this.getSurveyDetail(id);
-      if (sd) {
-        newState[category].push(assign({}, sd.attributes));
-      }
-    };
-  }
-
-  onCheckboxChange(name, isChecked) {
-    this.getSurveyDetail(name).set('value', isChecked);
-    this.updateState();
-    if (typeof this.props.onChange === 'function') {
-      this.props.onChange();
-    }
-  }
-
-  onFieldChange(evt) {
-    const fieldId = evt.target.id;
-    const value = evt.target.value;
-
-    if (fieldId === 'form_id') {
-      this.props.survey.settings.set('form_id', value);
-    }
-
-    this.setState({
-      xform_id_string: this.props.survey.settings.get('form_id')
-    });
-  }
-
-  render() {
-    return (
-      <FormSettingsEditor {...this.state} onCheckboxChange={this.onCheckboxChange.bind(this)} />
-    );
-  }
-};
+const UNSAVED_CHANGES_WARNING = t('You have unsaved changes. Leave form without saving?');
 
 const ASIDE_CACHE_NAME = 'kpi.editable-form.aside';
 
 export default assign({
   componentDidMount() {
-    document.body.classList.add('hide-edge');
+    this.props.router.setRouteLeaveHook(this.props.route, this.routerWillLeave);
 
     this.loadAsideSettings();
-    
 
     if (this.state.editorState === 'existing') {
       let uid = this.props.params.assetid;
@@ -196,6 +81,12 @@ export default assign({
     this.unpreventClosingTab();
   },
 
+  routerWillLeave() {
+    if (this.state.preventNavigatingOut) {
+      return UNSAVED_CHANGES_WARNING;
+    }
+  },
+
   loadAsideSettings() {
     const asideSettings = sessionStorage.getItem(ASIDE_CACHE_NAME);
     if (asideSettings) {
@@ -207,7 +98,7 @@ export default assign({
     sessionStorage.setItem(ASIDE_CACHE_NAME, JSON.stringify(asideSettings));
   },
 
-  onFormSettingsBoxChange() {
+  onMetadataEditorChange() {
     this.onSurveyChange();
   },
 
@@ -252,18 +143,20 @@ export default assign({
   }, 200),
 
   preventClosingTab() {
+    this.setState({preventNavigatingOut: true});
     $(window).on('beforeunload.noclosetab', function(){
-      return t('you have unsaved changes');
+      return UNSAVED_CHANGES_WARNING;
     });
   },
 
   unpreventClosingTab() {
+    this.setState({preventNavigatingOut: false});
     $(window).off('beforeunload.noclosetab');
   },
 
   nameChange(evt) {
     this.setState({
-      name: evt.target.value,
+      name: removeInvalidChars(evt.target.value),
     });
     this.onSurveyChange();
   },
@@ -295,13 +188,15 @@ export default assign({
       evt.preventDefault();
     }
 
-    if (this.state.settings__style)
+    if (this.state.settings__style !== undefined) {
       this.app.survey.settings.set('style', this.state.settings__style);
+    }
 
-    if (this.state.name)
+    if (this.state.name) {
       this.app.survey.settings.set('title', this.state.name);
+    }
 
-    let surveyJSON = surveyToValidJson(this.app.survey)
+    let surveyJSON = surveyToValidJson(this.app.survey);
     if (this.state.asset) {
       surveyJSON = unnullifyTranslations(surveyJSON, this.state.asset.content);
     }
@@ -320,7 +215,7 @@ export default assign({
     }).fail((jqxhr) => {
       let err;
       if (jqxhr && jqxhr.responseJSON && jqxhr.responseJSON.error) {
-        err = jqxhr.responseJSON.error
+        err = jqxhr.responseJSON.error;
       } else {
         err = t('Unknown Enketo preview error');
       }
@@ -331,10 +226,6 @@ export default assign({
   },
 
   saveForm(evt) {
-    
-    console.log("SaveForm TODO Move this to save success");
-          
-    
     if (evt && evt.preventDefault) {
       evt.preventDefault();
     }
@@ -342,10 +233,11 @@ export default assign({
     if (this.state.settings__style !== undefined) {
       this.app.survey.settings.set('style', this.state.settings__style);
     }
-
-    let surveyJSON = surveyToValidJson(this.app.survey)
+    let surveyJSON = surveyToValidJson(this.app.survey);
     if (this.state.asset) {
-      surveyJSON = unnullifyTranslations(surveyJSON, this.state.asset.content);
+      let surveyJSONWithMatrix = koboMatrixParser({source: surveyJSON}).source;
+      let surveyJSONCascade = syncCascadeChoiceNames({source: surveyJSONWithMatrix}).source;
+      surveyJSON = unnullifyTranslations(surveyJSONCascade, this.state.asset.content);
     }
     let params = {content: surveyJSON};
 
@@ -375,9 +267,11 @@ export default assign({
       params.settings = JSON.stringify(settings);
     }
 
-    params = koboMatrixParser(params);
-
     if (this.state.editorState === 'new') {
+      // we're intentionally leaving after creating new asset,
+      // so there is nothing unsaved here
+      this.unpreventClosingTab();
+
       // create new asset
       if (this.state.desiredAssetType) {
         params.asset_type = this.state.desiredAssetType;
@@ -385,9 +279,9 @@ export default assign({
         params.asset_type = 'block';
       }
       actions.resources.createResource.triggerAsync(params)
-        .then((asset) => {
+        .then(() => {
           hashHistory.push('/library');
-        })
+        });
     } else {
       // update existing asset
       var assetId = this.props.params.assetid;
@@ -402,8 +296,9 @@ export default assign({
         })
         .catch((resp) => {
           var errorMsg = `${t('Your changes could not be saved, likely because of a lost internet connection.')}&nbsp;${t('Keep this window open and try saving again while using a better connection.')}`;
-          if (resp.statusText != 'error')
+          if (resp.statusText !== 'error') {
             errorMsg = resp.statusText;
+          }
 
           alertify.defaults.theme.ok = 'ajs-cancel';
           let dialog = alertify.dialog('alert');
@@ -506,13 +401,10 @@ export default assign({
     });
   },
 
-  launchAppForSurveyContent(survey, _state={}) {
+  launchAppForSurveyContent(survey, _state = {}) {
     if (_state.name) {
       _state.savedName = _state.name;
     }
-
-   
-   
 
     let isEmptySurvey = (
         survey &&
@@ -539,9 +431,9 @@ export default assign({
     //    add_header Access-Control-Allow-Origin http://kf.kobo.local always;
     //    add_header Vary Origin always;
     //    add_header Access-Control-Allow-Credentials true always;
-    
+
     // TODO: NEED BETTER WAY TO GET KC URL
-    
+
     let url = new URL("http://kc.domain") ;
     if(arguments.length == 2 && arguments[1].asset_url)
     {
@@ -549,63 +441,61 @@ export default assign({
         let deployment_hostname = deploymentURL.hostname ; 
         deployment_hostname = "kc" + deployment_hostname.slice(2) ;
         url =  new URL(deploymentURL.protocol + "//"+  deployment_hostname + "/api/v1/forms?format=json&id_string=" + _state.asset_uid) ;
+  }
+
+  dataInterface.callKobocatAPI(url).done( (content) => {   
+    if(content.length > 0)
+    {
+       // filer out jsut media metadata records
+       const mediametadata = content[0].metadata.filter( metadata => metadata.data_type === "media"); 
+        _state.mediametadata =  mediametadata ;  
     }
 
-    dataInterface.callKobocatAPI(url).done( (content) => {   
-            if(content.length > 0)
-            {
-               // filer out jsut media metadata records
-               const mediametadata = content[0].metadata.filter( metadata => metadata.data_type === "media"); 
-                _state.mediametadata =  mediametadata ;  
-            }
-        
-            if (!_state.surveyLoadError) {
-                 _state.surveyAppRendered = true;
+    if (!_state.surveyLoadError) {
+         _state.surveyAppRendered = true;
 
-                var skp = new SurveyScope({
-                    survey: survey
-                });
-                this.app = new dkobo_xlform.view.SurveyApp({
-                    survey: survey,
-                    stateStore: stores.surveyState,
-                    ngScope: skp,
-                    appState: _state
-                  });
-                this.app.$el.appendTo(ReactDOM.findDOMNode(this.refs['form-wrap']));
-                this.app.render();
-                survey.rows.on('change', this.onSurveyChange);
-                survey.rows.on('sort', this.onSurveyChange);
-                survey.on('change', this.onSurveyChange);
-            }
-            this.setState(_state);
-     
-    }).fail ( (err) => {
-    
-                _state.surveyAppRendered = true;
+        var skp = new SurveyScope({
+            survey: survey
+        });
+        this.app = new dkobo_xlform.view.SurveyApp({
+            survey: survey,
+            stateStore: stores.surveyState,
+            ngScope: skp,
+            appState: _state
+          });
+        this.app.$el.appendTo(ReactDOM.findDOMNode(this.refs['form-wrap']));
+        this.app.render();
+        survey.rows.on('change', this.onSurveyChange);
+        survey.rows.on('sort', this.onSurveyChange);
+        survey.on('change', this.onSurveyChange);
+    }
+    this.setState(_state);
 
-                var skp = new SurveyScope({
-                    survey: survey
-                });
-                this.app = new dkobo_xlform.view.SurveyApp({
-                    survey: survey,
-                    stateStore: stores.surveyState,
-                    ngScope: skp,
-                    appState: _state
-                  });
-                this.app.$el.appendTo(ReactDOM.findDOMNode(this.refs['form-wrap']));
-                this.app.render();
-                survey.rows.on('change', this.onSurveyChange);
-                survey.rows.on('sort', this.onSurveyChange);
-                survey.on('change', this.onSurveyChange);
-       // _state.surveyLoadWarning = "Could not load mediametadata from kobocat" ; 
-         this.setState(_state);        
-    
-    }) ;
+}).fail ( (err) => {
 
-   
-  },
+        _state.surveyAppRendered = true;
 
-  
+        var skp = new SurveyScope({
+            survey: survey
+        });
+        this.app = new dkobo_xlform.view.SurveyApp({
+            survey: survey,
+            stateStore: stores.surveyState,
+            ngScope: skp,
+            appState: _state
+          });
+        this.app.$el.appendTo(ReactDOM.findDOMNode(this.refs['form-wrap']));
+        this.app.render();
+        survey.rows.on('change', this.onSurveyChange);
+        survey.rows.on('sort', this.onSurveyChange);
+        survey.on('change', this.onSurveyChange);
+// _state.surveyLoadWarning = "Could not load mediametadata from kobocat" ; 
+ this.setState(_state);        
+
+}) ;
+
+
+},
 
   clearPreviewError() {
     this.setState({
@@ -613,16 +503,16 @@ export default assign({
     });
   },
 
+ // clean up reference to default response map for geopoint widget
+ removeDefaultResponseMap(){
+  let mapcontainer = $('#default-response-map');   
+  if (mapcontainer.length > 0 && mapcontainer[0]._leaflet_map)
+  {          
+     let map = mapcontainer[0]._leaflet_map;
+     map.remove();
+  }   
+},
 
-  // clean up reference to default response map for geopoint widget
-  removeDefaultResponseMap(){
-      let mapcontainer = $('#default-response-map');   
-      if (mapcontainer.length > 0 && mapcontainer[0]._leaflet_map)
-      {          
-         let map = mapcontainer[0]._leaflet_map;
-         map.remove();
-      }   
-  },
   // navigating out of form builder
 
   safeNavigateToRoute(route) {
@@ -632,16 +522,14 @@ export default assign({
     } else {
       let dialog = alertify.dialog('confirm');
       let opts = {
-        title: t('You have unsaved changes. Leave form without saving?'),
+        title: UNSAVED_CHANGES_WARNING,
         message: '',
         labels: {ok: t('Yes, leave form'), cancel: t('Cancel')},
-        onok: (evt, val) => {
-            this.removeDefaultResponseMap()
-            hashHistory.push(route);
+        onok: () => {
+          this.removeDefaultResponseMap()
+          hashHistory.push(route);
         },
-        oncancel: () => {
-          dialog.destroy();
-        }
+        oncancel: dialog.destroy
       };
       dialog.set(opts).show();
     }
@@ -654,18 +542,16 @@ export default assign({
       } else {
         this.safeNavigateToRoute('/library/');
       }
+    } else if (this.props.location.pathname.startsWith('/library/new')) {
+      this.safeNavigateToRoute('/library/');
     } else {
-      if (this.props.location.pathname.startsWith('/library/new')) {
-        this.safeNavigateToRoute('/library/');
-      } else {
-        this.safeNavigateToRoute('/forms/');
-      }
+      this.safeNavigateToRoute('/forms/');
     }
   },
 
   safeNavigateToForm() {
     var backRoute = this.state.backRoute;
-    if (this.state.backRoute == '/forms') {
+    if (this.state.backRoute === '/forms') {
       backRoute = `/forms/${this.state.asset_uid}`;
     }
     this.safeNavigateToRoute(backRoute);
@@ -675,12 +561,10 @@ export default assign({
 
   renderFormBuilderHeader () {
     let {
-      allButtonsDisabled,
       previewDisabled,
       groupable,
       showAllOpen,
       showAllAvailable,
-      name,
       saveButtonText,
     } = this.buttonStates();
 
@@ -716,6 +600,7 @@ export default assign({
             m={'logo'}
             data-tip={t('Return to list')}
             className='left-tooltip'
+            tabIndex='0'
             onClick={this.safeNavigateToList}
           >
             <i className='k-icon-kobo' />
@@ -728,22 +613,19 @@ export default assign({
               }
               <input
                 type='text'
+                maxLength={NAME_MAX_LENGTH}
                 onChange={this.nameChange}
                 value={this.state.name}
+                title={this.state.name}
                 id='nameField'
               />
             </bem.FormModal__item>
           </bem.FormBuilderHeader__cell>
 
           <bem.FormBuilderHeader__cell m={'buttonsTopRight'} >
-            <bem.FormBuilderHeader__button m={['share']} className='is-edge'>
-              {t('share')}
-            </bem.FormBuilderHeader__button>
-
             <bem.FormBuilderHeader__button
               m={['save', {
                 savepending: this.state.asset_updated === update_states.PENDING_UPDATE,
-                savecomplete: this.state.asset_updated === update_states.UP_TO_DATE,
                 savefailed: this.state.asset_updated === update_states.SAVE_FAILED,
                 saveneeded: this.needsSave(),
               }]}
@@ -791,22 +673,6 @@ export default assign({
               data-tip={groupable ? t('Create group with selected questions') : t('Grouping disabled. Please select at least one question.')}
             >
               <i className='k-icon-group' />
-            </bem.FormBuilderHeader__button>
-
-            <bem.FormBuilderHeader__button
-              m={['download']}
-              data-tip={t('Download form')}
-              className='is-edge'
-            >
-              <i className='k-icon-download' />
-            </bem.FormBuilderHeader__button>
-
-            <bem.FormBuilderHeader__button
-              m={['attach']}
-              data-tip={t('Attach media files')}
-              className='is-edge'
-            >
-              <i className='k-icon-attach' />
             </bem.FormBuilderHeader__button>
 
             { this.toggleCascade !== undefined &&
@@ -877,13 +743,17 @@ export default assign({
             <bem.FormBuilderAside__row>
               <bem.FormBuilderAside__header>
                 {t('Form style')}
-                <a
-                  href={webformStylesSupportUrl}
-                  target='_blank'
-                  data-tip={t('Read more about form styles')}
-                >
-                  <i className='k-icon k-icon-help'/>
-                </a>
+
+                { stores.serverEnvironment &&
+                  stores.serverEnvironment.state.support_url &&
+                  <a
+                    href={stores.serverEnvironment.state.support_url + WEBFORM_STYLES_SUPPORT_URL}
+                    target='_blank'
+                    data-tip={t('Read more about form styles')}
+                  >
+                    <i className='k-icon k-icon-help'/>
+                  </a>
+                }
               </bem.FormBuilderAside__header>
 
               <label
@@ -907,7 +777,7 @@ export default assign({
                 onChange={this.onStyleChange}
                 placeholder={AVAILABLE_FORM_STYLES[0].label}
                 options={AVAILABLE_FORM_STYLES}
-                menuPlacement='auto'
+                menuPlacement='bottom'
               />
             </bem.FormBuilderAside__row>
 
@@ -917,9 +787,9 @@ export default assign({
                   {t('Metadata')}
                 </bem.FormBuilderAside__header>
 
-                <FormSettingsBox
+                <MetadataEditor
                   survey={this.app.survey}
-                  onChange={this.onFormSettingsBoxChange}
+                  onChange={this.onMetadataEditorChange}
                   {...this.state}
                 />
               </bem.FormBuilderAside__row>
@@ -954,7 +824,7 @@ export default assign({
           </bem.FormBuilderAside__content>
         }
       </bem.FormBuilderAside>
-    )
+    );
   },
 
   renderNotLoadedMessage() {
